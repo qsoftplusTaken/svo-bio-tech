@@ -1,26 +1,50 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { LayoutDashboard, Package, ShoppingBag, MessageSquare, FileText, Settings, LogOut, Tag } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { auth } from "@/lib/firebase/config";
 import { signOut } from "firebase/auth";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
   const router = useRouter();
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-600"></div></div>;
+  // ⚠️ /admin/login lives inside this layout — skip all checks to avoid infinite redirect loop
+  const isLoginPage = pathname === "/admin/login";
+
+  useEffect(() => {
+    if (isLoginPage) return; // login page handles its own auth
+    if (!loading && !user) {
+      // Not logged in at all — redirect to admin login
+      router.push(`/admin/login?redirect=${encodeURIComponent(pathname)}`);
+    }
+  }, [loading, user, pathname, router, isLoginPage]);
+
+  if (isLoginPage) {
+    // Login page renders itself — no wrapper needed
+    return <>{children}</>;
+  }
+
+  if (loading || (!loading && !user)) {
+    // Show spinner while loading or while redirect is happening
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary-600" />
+      </div>
+    );
+  }
 
   if (!isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 flex-col gap-4">
         <h1 className="text-3xl font-bold text-red-600">Access Denied</h1>
         <p className="text-gray-600">You do not have administrator privileges to view this area.</p>
-        <Link href="/" className="bg-primary-600 text-white px-6 py-2 rounded-lg font-bold">Return Home</Link>
+        <Link href="/admin/login" className="bg-primary-600 text-white px-6 py-2 rounded-lg font-bold">Admin Login</Link>
+        <Link href="/" className="text-gray-500 text-sm underline">Return Home</Link>
       </div>
     );
   }
@@ -37,7 +61,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const handleLogout = async () => {
     await signOut(auth);
-    router.push("/login");
+    router.push("/admin/login");
   };
 
   return (
